@@ -1,20 +1,24 @@
-import jwt
-import time
-from decouple import config
-
-JWT_SECRET = config('JWT_SECRET')
-JWT_ALGORITHM = config('JWT_ALGORITHM')
-
-def signJWT(user_id: str):
-    payload = {
-        'usere_id': user_id,
-        'expires': time.time() + 600
-    }
-    token = jwt.encode(payload, key=JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-    return{"access_token": token }
-
-def decodeJWT(token:str):
-    decoded_token = jwt.decode(token, key=JWT_SECRET, algorithms=JWT_ALGORITHM)
-
-    return decoded_token if decoded_token["expires"] >= time.time() else None
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Request, HTTPException
+from .handler import decodeJWT
+ 
+class Bearer(HTTPBearer):
+    def __init__(self, auto_error: bool = True):
+        super(Bearer, self).__init__(auto_error=auto_error)
+ 
+    async def __call__(self, request: Request):
+        credentials: HTTPAuthorizationCredentials = await super(Bearer, self).__call__(request)
+        if credentials:
+            if not credentials.scheme == "Bearer":
+                raise HTTPException(status_code=403, detail="Invalid authentication scheme")
+            if not self.verify_jwt(credentials.credentials):
+                raise HTTPException(status_code=403, detail="Invalid token")
+            return credentials.credentials
+        else:
+            raise HTTPException(status_code=403, detail="Invalid authorization code")
+            
+    def verify_jwt(self, token: str):
+        decoded_token = decodeJWT(token)
+        if decoded_token:
+            return True
+        return False
